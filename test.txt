@@ -1,0 +1,434 @@
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:pawoo_flutter/domain/models/match_state.dart';
+import 'package:pawoo_flutter/presentation/models/match_result.dart';
+import 'package:pawoo_flutter/presentation/models/results_dialog_status.dart';
+import 'package:pawoo_flutter/presentation/values/app_colors.dart';
+import 'package:pawoo_flutter/presentation/values/themes/pawoo_theme.dart';
+import 'package:pawoo_flutter/presentation/viewmodels/round_result_view_model.dart';
+import 'package:provider/provider.dart';
+
+import 'dialog_title.dart';
+
+class MultiplayerResultsDialog extends StatelessWidget {
+  final List<RoundResultViewModel> results;
+  final int currentRound;
+  final MatchState matchState;
+  final int matchPoints;
+  final MatchResult matchResult;
+
+  MultiplayerResultsDialog(
+      {@required this.results,
+      @required this.currentRound,
+      @required this.matchPoints,
+      @required this.matchState,
+      @required this.matchResult});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: content(context),
+    );
+  }
+
+  content(BuildContext context) {
+    final theme = Provider.of<PawooTheme>(context, listen: false);
+    final opponentNickname =
+        results[0].opponentNickname != null ? results[0].opponentNickname : AppLocalizations.of(context).unknown;
+
+    final resultsMessage = _resultsMessage(context);
+    final resultState = currentRound != null ? results[currentRound].state : null;
+
+    var dialogTitle;
+    if (matchState == MatchState.RUNNING) {
+      dialogTitle = AppLocalizations.of(context).results;
+    } else if (matchState == MatchState.EXPIRED) {
+      dialogTitle = AppLocalizations.of(context).multiplayer_match_expired;
+    } else if (matchState == MatchState.FINISHED) {
+      if (matchResult == MatchResult.won) {
+        dialogTitle = AppLocalizations.of(context).multiplayer_match_won;
+      } else if (matchResult == MatchResult.lost) {
+        dialogTitle = AppLocalizations.of(context).multiplayer_match_lost;
+      } else if (matchResult == MatchResult.tied) {
+        dialogTitle = AppLocalizations.of(context).multiplayer_match_tied;
+      }
+    }
+
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: theme.dialogWidth,
+        maxHeight: double.infinity,
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        DialogTitle(title: dialogTitle),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 8.0, 0, 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Flexible(
+                    fit: FlexFit.tight,
+                    flex: 2,
+                    child: Container(),
+                  ),
+                  Flexible(
+                    fit: FlexFit.tight,
+                    flex: 3,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            alignment: Alignment.center,
+                            child: Text(
+                              AppLocalizations.of(context).you,
+                              style: TextStyle(fontSize: 20.0, fontFamily: 'Economica'),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Container(
+                            alignment: Alignment.center,
+                            child: Text(
+                              opponentNickname,
+                              style: TextStyle(fontSize: 20.0, fontFamily: 'Economica'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(children: _buildResults(context)),
+            resultsMessage != null
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: RichText(
+                            text: TextSpan(
+                          style: TextStyle(fontFamily: 'Economica', fontSize: 20.0, color: Colors.black87),
+                          children: resultsMessage,
+                        )),
+
+                        //Text(resultsMessage, style: TextStyle(fontSize: 20.0, fontFamily: 'Economica')),
+                      )
+                    ],
+                  )
+                : null,
+            Padding(
+              padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    fit: FlexFit.loose,
+                    flex: 1,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(primary: AppColors.pawooGreen),
+                      onPressed: () {
+                        Navigator.pop(context, _dialogStatus(resultState));
+                      },
+                      child: Text(_navigationText(context, resultState)),
+                    ),
+                  )
+                ],
+              ),
+            ),
+          ].whereType<Widget>().toList(),
+        )
+      ]),
+    );
+  }
+
+  List<Widget> _buildResults(BuildContext context) {
+    List<Widget> widgetList = [];
+    int count = 0;
+    for (var result in results) {
+      widgetList.add(ResultsRow(result, count + 1));
+      count++;
+    }
+    return widgetList;
+  }
+
+  String _navigationText(BuildContext context, ResultState state) {
+    if (matchState == MatchState.FINISHED) {
+      return AppLocalizations.of(context).finish;
+    } else if (matchState == MatchState.EXPIRED) {
+      return AppLocalizations.of(context).go_back_button_title;
+    } else if (state == ResultState.player_turn || state == ResultState.only_opponent_played) {
+      return AppLocalizations.of(context).next_round;
+    } else if (state == ResultState.opponent_turn || state == ResultState.only_player_played) {
+      return AppLocalizations.of(context).go_back_button_title;
+    } else {
+      return null;
+    }
+  }
+
+  List<TextSpan> _resultsMessage(BuildContext context) {
+    if (matchState == MatchState.FINISHED) {
+      switch (matchResult) {
+        case MatchResult.won:
+          final pointsText = AppLocalizations.of(context).points_column_title;
+          return _buildTextSpans(AppLocalizations.of(context).match_won, '${matchPoints.toString()} $pointsText');
+        default:
+          return null;
+      }
+    }
+    return null;
+  }
+
+  List<TextSpan> _buildTextSpans(String text, String pointsMessage) {
+    List<TextSpan> textSpans = [];
+    var parts = text.split('#');
+
+    for (var part in parts) {
+      TextSpan span;
+      if (part.contains('%s')) {
+        span = TextSpan(
+            text: pointsMessage,
+            style: TextStyle(fontFamily: 'Economica', color: AppColors.pawooGreen, fontWeight: FontWeight.bold));
+      } else {
+        span = TextSpan(text: part);
+      }
+      textSpans.add(span);
+    }
+    return textSpans;
+  }
+
+  ResultsDialogStatus _dialogStatus(ResultState resultState) {
+    if (matchState == MatchState.FINISHED) {
+      return ResultsDialogStatus.back;
+    } else if (resultState == ResultState.player_turn || resultState == ResultState.only_opponent_played) {
+      return ResultsDialogStatus.next;
+    } else if (resultState == ResultState.opponent_turn || resultState == ResultState.only_player_played) {
+      return ResultsDialogStatus.back;
+    } else {
+      return null;
+    }
+  }
+}
+
+class ResultsRow extends StatelessWidget {
+  final RoundResultViewModel roundResult;
+  final int rowCount;
+
+  ResultsRow(this.roundResult, this.rowCount);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Provider.of<PawooTheme>(context, listen: false);
+    final _ResultsRowViewModel viewModel = _ResultsRowViewModel(context, roundResult);
+    Color timeDifferenceColor = AppColors.tileText;
+    DisplayWinnerStatus winnerStatus = DisplayWinnerStatus.none;
+    if (roundResult.playerWasFaster() != null) {
+      timeDifferenceColor = roundResult.playerWasFaster() ? AppColors.successGreen : AppColors.failureRed;
+      winnerStatus = roundResult.playerWasFaster() ? DisplayWinnerStatus.player : DisplayWinnerStatus.opponent;
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(top: 4.0, bottom: 4.0),
+      child: Row(
+        children: [
+          Flexible(
+            fit: FlexFit.tight,
+            flex: 2,
+            child: Container(
+              //decoration: BoxDecoration(border: Border.all(color: Colors.blueAccent)),
+              child: Row(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.only(left: 25.0),
+                    child: Container(
+                      alignment: Alignment.center,
+                      width: 20,
+                      height: 20,
+                      child: Text(
+                        '$rowCount',
+                        style: TextStyle(color: Colors.white, fontFamily: 'Economica'),
+                      ),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.pawooGreen,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(left: 10.0),
+                    child: Text(
+                      viewModel.wordText,
+                      style: TextStyle(fontFamily: 'Economica', fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.left,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Flexible(
+            fit: FlexFit.tight,
+            flex: 3,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildPlayerTimeRow(
+                    winnerStatus, DisplayWinnerStatus.player, viewModel.playerText, roundResult.playerTimeDifference(), true),
+                _buildPlayerTimeRow(winnerStatus, DisplayWinnerStatus.opponent, viewModel.opponentText,
+                    roundResult.opponentTimeDifference(), false),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _timeDifference(int timeDifference) {
+    var baseTimeDifference = (timeDifference / 1000).toStringAsFixed(2);
+    return '${baseTimeDifference.startsWith("-") ? "" : "+"}${baseTimeDifference}s';
+  }
+
+  // isPlayer is a flag to see if this time row is for the player (system user) or the opponent
+  Widget _buildPlayerTimeRow(
+      DisplayWinnerStatus winnerStatus, DisplayWinnerStatus winningStatus, String playerText, int timeDifference, bool isPlayer) {
+    bool isTimeNull = false;
+    if (isPlayer) {
+      if (roundResult.state == ResultState.only_opponent_played || roundResult.state == ResultState.no_result || roundResult.state == ResultState.player_turn) {
+        isTimeNull = true;
+      }
+    } else {
+      if (roundResult.state == ResultState.only_player_played || roundResult.state == ResultState.no_result || roundResult.state == ResultState.opponent_turn) {
+        isTimeNull = true;
+      }
+    }
+
+    List<Widget> rowChildren = [];
+
+    if (isTimeNull) {
+      rowChildren = [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              playerText,
+              textAlign: TextAlign.left,
+              style: TextStyle(
+                  fontSize: 16.0,
+                  color: winnerStatus == winningStatus ? AppColors.pawooGreen : AppColors.textGray,
+                  fontWeight: winnerStatus == winningStatus ? FontWeight.bold : null,
+                  fontFamily: 'Economica'),
+            ),
+          ].whereType<Widget>().toList(),
+        )
+      ];
+    } else {
+      rowChildren = [
+        Flexible(
+          fit: FlexFit.tight,
+          flex: 1,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                playerText,
+                textAlign: TextAlign.left,
+                style: TextStyle(
+                    fontSize: 16.0,
+                    color: winnerStatus == winningStatus ? AppColors.pawooGreen : AppColors.textGray,
+                    fontWeight: winnerStatus == winningStatus ? FontWeight.bold : null,
+                    fontFamily: 'Economica'),
+              ),
+            ].whereType<Widget>().toList(),
+          ),
+        ),
+        Flexible(
+          fit: FlexFit.tight,
+          flex: 1,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              winnerStatus == winningStatus
+                  ? Icon(
+                      Icons.military_tech,
+                      color: Colors.amberAccent,
+                      size: 22.0,
+                    )
+                  : (timeDifference != null
+                      ? Text(_timeDifference(timeDifference),
+                          style: TextStyle(
+                              fontSize: 10.0,
+                              fontFamily: 'Economica',
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.failureRed))
+                      : null),
+            ].whereType<Widget>().toList(),
+          ),
+        ),
+      ];
+    }
+
+    return Expanded(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: winnerStatus == winningStatus ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+        children: rowChildren.whereType<Widget>().toList(),
+      ),
+    );
+  }
+}
+
+class _ResultsRowViewModel {
+  final playerText;
+  final opponentText;
+  final wordText;
+
+  _ResultsRowViewModel._({@required this.playerText, @required this.opponentText, @required this.wordText});
+
+  factory _ResultsRowViewModel(BuildContext context, RoundResultViewModel result) {
+    // TODO pass max duration to dialog from backend response
+    //this probably shouldn't be hardcoded here, but it should never be used any
+    final maxTimeNeeded = 60000;
+
+    var playerText;
+    var opponentText;
+    var wordText = '';
+
+    if (result.state == ResultState.player_turn) {
+      playerText = AppLocalizations.of(context).your_turn.toUpperCase();
+      opponentText = '';
+    } else if (result.state == ResultState.opponent_turn) {
+      opponentText = AppLocalizations.of(context).opponent_turn.toUpperCase();
+      playerText = '';
+    } else if (result.state == ResultState.both_played) {
+      playerText = '${((result.playerTimeNeededMs ?? maxTimeNeeded) / 1000).toStringAsFixed(2)}s';
+      opponentText = '${((result.opponentTimeNeededMs ?? maxTimeNeeded) / 1000).toStringAsFixed(2)}s';
+      wordText = result.word;
+    } else if (result.state == ResultState.only_player_played) {
+      playerText = '${((result.playerTimeNeededMs ?? maxTimeNeeded) / 1000).toStringAsFixed(2)}s';
+      opponentText = AppLocalizations.of(context).opponent_turn.toUpperCase();
+      wordText = result.word;
+    } else if (result.state == ResultState.only_opponent_played) {
+      playerText = AppLocalizations.of(context).your_turn.toUpperCase();
+      opponentText = AppLocalizations.of(context).hidden.toUpperCase();
+    } else if (result.state == ResultState.no_result) {
+      playerText = '';
+      opponentText = '';
+    }
+
+    playerText = playerText.replaceAll('\.', ',');
+    opponentText = opponentText.replaceAll('\.', ',');
+
+    return _ResultsRowViewModel._(playerText: playerText, opponentText: opponentText, wordText: wordText);
+  }
+}
+
+enum DisplayWinnerStatus { player, opponent, none }
